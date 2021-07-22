@@ -1,0 +1,98 @@
+---
+title: "NAscent Intensity Extractor"
+output: html_document
+---
+
+
+```{r}
+# SCRIPT 1 -  WORKS ON ALL SUBDIRECTORIES IN THE SINGLECELL-MASKS FOLDER INDICATED
+
+### Compares 3D-OC results from Nascent-RNA-FISH from 2D (precise detection) and from 3D (precise IntDen measurement) ###
+#########################################################################################################################
+# input: singlecellmasks folder with fields of view as subfolders and 3D-OC results from Fig.6F_1of2.igm script. Singlecellmasks folder comes from ThunderFISH
+# ouput: new .csv files where identified nascent spots in 2D and 3D are further precisely filtered and IntDens is extracted as a separate .csv document
+
+
+data <- "C:/Results/yourdata/singlecellmasks"
+timepoint = "4h"           #modify timepoint! "UNT" or "2h" or "4h" dTag treatment
+
+### 1. compare spots and save them as .csv files: ###
+folder.names<-list.files(data, pattern = "Experiment")
+for (f in 1:length(folder.names)){        # ^ ^ ^             Loop across folders with seperate FOVs
+  subfolder.names <- paste(data, "/", folder.names[f], sep="");
+  
+  
+arrays2D <- list.files(subfolder.names, pattern = "2DNascentSpots.csv$")
+arrays3D <- list.files(subfolder.names, pattern = "3DNascentSpots.csv$")
+
+for (i in 1:length(arrays2D)){               # % % %
+list.signals<-"";
+matrix2D <- read.csv(paste(subfolder.names, "/", arrays2D[i], sep=""))
+matrix3D <- read.csv(paste(subfolder.names, "/", arrays3D[i], sep=""))
+    if (nrow(matrix2D)> 0){          # 1
+    if (nrow(matrix3D)> 0){          # 2   
+    for (n in 1:nrow(matrix2D)){     # & & &
+        
+          mat <- matrix3D
+          mat$X <- abs(mat$X - matrix2D$X[n]);   # subtract coordinates to find the smallest difference in X&Y between spot in 2D and 3D
+          mat$Y <- abs(mat$Y - matrix2D$Y[n]);
+          sum <- mat$X + mat$Y;
+          index<-which(sum<6) # <-which index has sufficiently short distance?, 6 is little for big spots!
+          #print(index);
+          
+            if (length(index) >0){  # * * *     # condition when none 3D spots are within 6px from 2D spots (if index is empty 
+                                                        # then it becomes an integer, if it isn't empty it is numeric:
+            if (length(index)==1){
+              list.signals<-rbind(list.signals, matrix3D[index,])}
+            
+            if (length(index) > 1){index <- index[1]; # if >1 spots identified in proximity then take just the first one
+                list.signals<-rbind(list.signals, matrix3D[index,])}  
+            }                               # * * *
+            
+        
+    }                                # & & &
+    # Here as a very last step filter out doubled columns? - NOT DONE YET
+      
+      if (is.character(list.signals)==FALSE){ # when list.signals is a character then nothing was added to it, if it isn't then it contains numbers
+      list.signals <- list.signals[-1,]; names(list.signals)[1]<-"vol"
+      write.csv(list.signals, paste(subfolder.names, "/", unlist(strsplit(arrays2D[i], "_cell_"))[1],"_FinalINTSpots.csv", sep=""))}
+      
+ # in the case of nrow(matrix2D) being empty just save an empty .csv file:     
+    }}else{empty<-data.frame(c(0)); names(empty)[1] = "IntDen";
+     write.csv(empty, paste(subfolder.names, "/", unlist(strsplit(arrays2D[i], "_cell_"))[1],"_FinalINTSpots.csv", sep=""))}
+
+}                                          # % % %
+} # ^ ^ ^
+
+
+
+
+### Merge .csv files and save single file with all Nascent RNA-FISH spot intensity: ###
+
+out.file<-""            # this is an empty list of molecules
+no.of.cells <- ""       #this is an empty list of cells
+folder.names <- list.dirs(data, full.names = TRUE, recursive = FALSE)
+###############
+for(k in 1:length(folder.names)){
+  
+  file.names <- dir(folder.names[k], pattern ="_FinalINTSpots.csv")
+  folder <-folder.names[k]
+  
+    for(i in 1:length(file.names)){
+    file <- read.csv(paste(folder, "/", file.names[i], sep="")) 
+    if (file$IntDen[1] > 1){
+    out.file <- rbind(out.file, file)}
+               # extracts IntDens of spots and converts it to numeric
+
+  }
+}
+out.file2 <- as.numeric(out.file$IntDen)
+final <- data.frame(out.file2, timepoint); final<-final[-1,]; names(final)[1] <- "IntDen"
+hist(as.numeric(final$IntDen), 100)
+write.csv(final, paste(data, "/", timepoint, "_Final_aggregated_INT-FISH-int.csv", sep=""))
+
+
+#NEXT: if nrow>1 -> etract files with  "_FinalINTSpots.csv" and $IntDen, and merge them into one!
+```
+
+

@@ -1,0 +1,72 @@
+---
+title: "Supp.Fig.S9"
+output: html_document
+---
+
+
+```{r}
+# SCRIPT 1
+####### Extraction of transcription noise originating from Area and DAPI ########
+#################################################################################
+# input: .csv files with x=transcripts, y=area or DAPI
+# output: .csv file with decomposed noise for each gene
+# Note that absolute values of Area nd DAPI CVs are taken!
+#
+library(ggplot2); library(ggstance);library('plyr'); library("svglite");library(dplyr);library(tools);library(magrittr);library(ggpubr);
+path<-"C:/Postdoc Oxford/Results/Cell Volume vs. Transcription/Area based on masks/Based on Padovan/genes"
+data<-read.csv("C:/Postdoc Oxford/Results/Cell Volume vs. Transcription/Area based on masks/Based on Padovan/genes/E2f6.csv")
+names(data)[1] <- "transcripts"; names(data)[2] <- "area"; names(data)[3] <- "dapi";
+head(data)
+
+
+  final.noise <- "" # empty list for noise
+  list.gene.files <-dir(path, pattern =".csv$")
+for (i in 1:length(list.gene.files)){
+  data <- read.csv(paste(path, "/",list.gene.files[i], sep=""))
+  names(data)[1] <- "transcripts"; names(data)[2] <- "area"; names(data)[3] <- "dapi";
+  just.name <- file_path_sans_ext(list.gene.files[i])
+  
+#### generate plots with lm: ####
+#################################
+plot.area<-ggplot(data, aes(y=data$transcripts, x=data$area))+geom_point(shape=1, size=2)+geom_smooth(method=lm)+
+  expand_limits(x=c(0, round(max(data$area))), y=c(0,max(data$transcripts)))+ theme_test()
+ggsave(plot.area, filename = paste(just.name, "_Area_.png", sep = ""), path = "C:/Postdoc Oxford/Results/Cell Volume vs. Transcription/Area based on masks/Based on Padovan/genes", height = 4, width = 4)
+
+plot.dapi<-ggplot(data, aes(y=data$transcripts, x=data$dapi))+geom_point(shape=1, size=2)+geom_smooth(method=lm)+
+  expand_limits(x=c(0, round(max(data$dapi))), y=c(0,max(data$transcripts)))+ theme_test()
+ggsave(plot.dapi, filename = paste(just.name, "_DAPI_.png", sep = ""), path = "C:/Postdoc Oxford/Results/Cell Volume vs. Transcription/Area based on masks/Based on Padovan/genes", height = 4, width = 4)
+
+### Linear model and coefficient extraction to input to Cv equation: ####
+#########################################################################
+lmMod.area <- lm(data$transcripts ~ data$area, data=data); #summary(lmMod.area)
+a.area<-as.numeric(lmMod.area$coefficients[1]) #intercept
+b.area<-as.numeric(lmMod.area$coefficients[2]) #slope
+
+lmMod.dapi <- lm(data$transcripts ~ data$dapi, data=data); #summary(lmMod.dapi)
+a.dapi<-as.numeric(lmMod.dapi$coefficients[1]) #intercept
+b.dapi<-as.numeric(lmMod.dapi$coefficients[2]) #slope
+
+r <- cor(data$area, data$dapi, method = c("pearson"))
+
+
+# BELOW NOISE AS SQUARED CV:
+CV=(sd(data$transcripts)/ mean(data$transcripts))^2   # total CV from RNA count, I didnt use "(a.area+b.area*mean(data$area))" and used "mean(Data$transcripts)" instead as when I compared it it gave exactly the same results
+
+CV.area<-abs((b.area*mean(data$area)/(a.area+b.area*mean(data$area))) * cov(data$transcripts, data$area, method = "pearson")/(mean(data$transcripts)*mean(data$area))) # this is equation from Padovan-Merhar et al., 2015 for area
+
+CV.dapi<-abs((b.dapi*mean(data$dapi)/(a.dapi+b.dapi*mean(data$dapi))) * cov(data$transcripts, data$dapi, method = "pearson")/(mean(data$transcripts)*mean(data$dapi))) # this is equation from Padovan-Merhar et al., 2015 for Dapi
+
+CV.corr.subtracted <- CV - CV.area - CV.dapi        # careful: this is wrong in the case Area and DAPI correlate: in such case it's double
+CV.corr.final <- CV - CV.area - CV
+noise<-c(just.name, CV, CV.dapi, CV.area, CV.corr.subtracted, r)
+final.noise<-rbind(final.noise, noise)
+}
+  
+final.noise<-final.noise[-1,]
+names(final.noise)[1] <-"gene"; names(final.noise)[2] <-"CV_total_RNA-count"; names(final.noise)[3] <-"CV_DAPI"; names(final.noise)[4] <-"CV_AREA"; names(final.noise)[5] <-"CV_corr.subtracted.intrinsic"; names(final.noise)[6] <-"Pearson Area vs. DAPI";
+final.noise<-data.frame(final.noise)
+names(final.noise)[1] <-"gene"; names(final.noise)[2] <-"CV_total_RNA-count"; names(final.noise)[3] <-"CV_DAPI"; names(final.noise)[4] <-"CV_AREA"; names(final.noise)[5] <-"CV_corr.subtracted.intrinsic"; names(final.noise)[6] <-"Pearson Area vs. DAPI";
+write.csv(final.noise, "C:/Postdoc Oxford/Results/Cell Volume vs. Transcription/Area based on masks/Based on Padovan/Corrected_CV.csv")
+
+
+```
